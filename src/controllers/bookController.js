@@ -1,16 +1,50 @@
 const Book = require("../models/bookModel");
 const Review = require("../models/reviewModel");
 const ObjectId = require("mongoose").Types.ObjectId;
+const aws= require("aws-sdk")
 
 const isValidString = function (data) {
 	if (typeof data !== "string" || data.trim().length === 0) return false;
 	return true;
 };
 
+aws.config.update({
+    accessKeyId: "AKIAY3L35MCRZNIRGT6N",
+    secretAccessKey: "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",
+    region: "ap-south-1"
+})
+
+let uploadFile= async ( file) =>{
+   return new Promise( function(resolve, reject) {
+    // this function will upload file to aws and return the link
+    let s3= new aws.S3({apiVersion: '2006-03-01'}); // we will be using the s3 service of aws
+
+    var uploadParams= {
+        ACL: "public-read",
+        Bucket: "classroom-training-bucket",  //HERE
+        Key: "acc/" + file.originalname, //HERE 
+        Body: file.buffer
+    }
+
+
+    s3.upload( uploadParams, function (err, data ){
+        if(err) {
+            return reject({"error": err})
+        }
+        console.log(data)
+        console.log("file uploaded succesfully")
+        return resolve(data.Location)
+    })
+
+
+   })
+}
+
+
 const createBook = async function (req, res) {
 	try {
 		const data = req.body;
-
+		let files= req.files
 		if (Object.keys(data).length === 0)
 			return res
 				.status(400)
@@ -18,8 +52,14 @@ const createBook = async function (req, res) {
 
 		const requiredFields = ["title", "excerpt", "userId", "ISBN", "category", "subcategory", "releasedAt",];
 
-		const acceptedFields = ["title", "excerpt", "userId", "ISBN", "category", "subcategory", "reviews", "deletedAt", "isDeleted", "releasedAt",];
+		const acceptedFields = ["bookCover","title", "excerpt", "userId", "ISBN", "category", "subcategory", "reviews", "deletedAt", "isDeleted", "releasedAt",];
 
+		if(!files){
+			return res.status(400).send({ status: false, message:  "files is missing." });
+		}
+
+		let bookCover= await uploadFile( files[0] )
+		data.bookCover=bookCover
 		for (key in req.body) {
 			if (!acceptedFields.includes(key))
 				return res.status(400).send({ status: false, message: `Fields can only be among these: ${acceptedFields.join(", ")}`, });
@@ -83,6 +123,8 @@ const getBooks = async function (req, res) {
 			if (!queryArray.includes(key))
 				return res.status(400).send({ status: false, msg: `Query parameters can only be among these: ${queryArray.join(", ")}`, });
 		}
+
+
 
 		let { userId, category, subcategory } = req.query;
 
